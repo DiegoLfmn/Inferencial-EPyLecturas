@@ -1,0 +1,254 @@
+---
+title: "EP03-avance-equipo-4"
+date: "2026-10-15"
+output:
+  html_document:
+    toc: false
+    toc_float: false
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggpubr)
+library(pwr)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(RVAideMemoire)
+```
+
+## Pregunta 1
+
+### Contexto y datos
+
+Un grupo de científicas y científicos está llevando a cabo un experimento para evaluar el crecimiento de plantas en condiciones de tierra sintética. Inicialmente, seleccionaron aleatoriamente 25 plantas de la misma parcela de tierra y registraron su crecimiento. Luego, estas plantas fueron trasladadas a la nueva tierra sintética durante un período de tiempo determinado, y posteriormente se registró nuevamente su crecimiento. Los resultados se presentan a continuación:
+
+- 7 plantas mostraron un crecimiento bajo tanto en la tierra original como en la tierra sintética.
+- 3 plantas que mostraron un crecimiento bajo en la tierra original experimentaron un aumento en su crecimiento al ser trasladadas a la tierra sintética.
+- 6 plantas mantuvieron un alto nivel de crecimiento en ambas condiciones de suelo.
+- 9 plantas mostraron un alto nivel de crecimiento en la tierra original, pero este disminuyó al ser trasladadas a la tierra sintética.
+
+### Pregunta
+
+¿Existe evidencia de que usando tierra sintética haya tenido un efecto significativo en el crecimiento de las plantas?
+
+### Analisis realizado
+
+Analizando los datos, primero sabemos que son independientes, ya que fueron seleccionadas aleatoriamente de la parcela. Además, tenemos una población que se muestra en dos condiciones distintas, lo cual nos da sospechas de utilizar la prueba de McNemar. Para esta, primero se requiere que en la población haya al menos 10 cambios en esta misma entre las dos condiciones. Con esto tenemos que 3 plantas mostraron un crecimiento bajo en la tierra original, pero experimentaron un aumento en su crecimiento al ser trasladadas a la tierra sintética, y que otras 9 plantas mostraron un alto nivel de crecimiento en la tierra original y disminuyeron al ser trasladadas a la tierra sintética. Esto nos da una suma de 12 plantas que tuvieron cambios entre las dos tierras y 13 plantas que se mantuvieron igual en ambas. Con esto cumplimos el requisito de al menos 10 cambios, por lo que se decide usar la prueba de McNemar.
+
+Hipótesis:
+
+- H0 (hipótesis nula): La probabilidad de cambio entre una tierra es **igual** a la de la otra tierra.
+- Ha (hipótesis alternativa): La probabilidad de cambio entre una tierra es **distinta** a la de la otra tierra.
+
+### Desarrollo 
+
+```{r desarrollo-p1}
+# A: Aumento de crecimineto
+# D: Disminucion de crecimiento
+
+tierra_original <- c("D","D","D","D","D","D","D","D","D","D","A","A","A","A","A","A","A","A","A","A","A","A","A","A","A")
+tierra_sintetica <- c("D","D","D","D","D","D","D","A","A","A","A","A","A","A","A","A","D","D","D","D","D","D","D","D","D")
+
+tabla <- table(tierra_original, tierra_sintetica)
+
+# Mostrar la tabla
+cat("Tabla de contingencia:\n")
+print(tabla)
+
+# Aplicar la prueba de McNemar a la tabla y mostrarla
+prueba_1 <- mcnemar.test(tabla, correct = FALSE)
+print(prueba_1)
+# p-value = 0.08326
+```
+
+### Conclusión
+
+Al momento de ordenar los datos y evaluar la prueba correspondiente ya comentada, llegamos a un p-value: 0.08326, que consideramos que tiene un nivel de significancia de alpha = 0.05. Podemos rechazar la H0 y aprobar la Ha, concluyendo que no existe evidencia suficiente para negar que la probabilidad de cambio en el crecimiento de las plantas es distinta entre cada huerto.
+
+## Pregunta 2
+
+### Contexto y datos
+
+En un club de juegos de mesa, se preguntó por separado a 27 socias y socios elegidos al azar si prefieren jugar ajedrez o Monopoly, observando que 8 de los 17 chicos eligen jugar ajedrez, y 3 de las 10 chicas prefieren jugar Monopoly.
+
+### Pregunta
+
+¿Existe relación entre el sexo de la persona y elegir jugar ajedrez o Monopoly?
+
+### Analisis realizado
+
+Analizando los datos, podemos observar que tenemos una muestra, la cual posee 2 variables: primero el género (chico o chica) y juego preferido (ajedrez o Monopoly). Con esto procedemos a realizar la tabla y calcular la frecuencia. Con esto buscamos decidir entre la prueba "Exacta de Fisher" y la prueba "Chi-cuadrado de Homogenea".
+
+```{r analisis-pregunta2}
+# Cantidad de muestras
+n <- 27
+
+tabla <- matrix(c(8,7,9,3),
+                nrow=2,
+                byrow = FALSE)
+colnames(tabla) <- c("Ajedrez","Monopoly")
+rownames(tabla) <- c("Chico","Chica")
+print(tabla)
+
+# Calcular frecuencias
+
+i1j1 <- ((8+9)*(8+7))/n
+i2j1 <- ((7+3)*(8+7))/n
+i1j2 <- ((8+9)*(9+3))/n
+i2j2 <- ((7+3)*(9+3))/n
+
+frecuencias <- matrix(c(i1j1,i2j1,i1j2,i2j2),
+                nrow=2,
+                byrow = FALSE)
+colnames(frecuencias) <- c("Ajedrez","Monopoly")
+rownames(frecuencias) <- c("Chico","Chica")
+print(frecuencias)
+```
+
+Con este cálculo de la frecuencia esperada podemos ver cómo uno de los resultados es  `r round(i2j2,2)` el cual es menor a 5. Por lo tanto, con esto no se cumple la condición para la prueba de Chi-Cuadrado, por lo tanto, utilizaremos la prueba Exacta de Fisher.
+Hipótesis:
+
+- HO (Hipótesis nula): La elección de los juegos no tiene relación con el género de la persona.
+
+- Ha (Hipótesis alternativa): La elección de los juegos sí tiene relación con el género de la persona.
+
+### Desarrollo
+
+```{r desarrollo-p2}
+prueba <- fisher.test(tabla)
+print(prueba)
+```
+
+### Conclusión
+
+Al momento de generar las tablas de secuencias observadas y evaluar la prueba correspondiente definida anteriormente, obtenemos un p-value: 0.4244, que es mucho mayor al nivel de significancia definido con un alpha = 0.05, lo que nos lleva a rechazar la H0 y aceptar la Ha, concluyendo que no hay evidencia suficiente para negar que la elección de los juegos **sí** tiene relación con el género de la persona. 
+
+## Pregunta 3
+
+### Contexto y datos
+
+Se realizó un estudio para determinar si la distribución de los métodos de ataque utilizados por luchadores en dos gimnasios de artes marciales diferentes (que por temas de privacidad, llamaremos gimnasio A y gimnasio B) es la misma. Se seleccionaron aleatoriamente 32 luchadores y luchadoras de la lista de inscritos de cada gimnasio, y se registró el método de ataque principal de cada persona. Ambos gimnasios pertenecen a la misma cadena, y la inscripción permite entrenar en cualquiera de los dos. En el gimnasio A, 22 usan patadas, 4 los puños y 6 emplean agarres, mientras que en el gimnasio B, 8 usan patadas, 14 los puños y 10 emplean agarres.
+
+### Pregunta
+
+¿Es igual la distribución de métodos de ataque utilizados por luchadores y luchadoras en los gimnasios de artes marciales A y B?
+
+### Analisis realizado
+
+Analizando los datos, al igual que la pregunta anterior, tenemos que realizar las tablas y sus cálculos de frecuencia respectivos para decidir si la prueba "Chi-Cuadrado Homogeneidad" es la adecuada y se cumplen sus requisitos.
+
+```{r analisis-pregunta3}
+# Cantidad de muestras
+n <- 32
+
+tabla <- matrix(c(22,8,4,14,6,10),
+                nrow=2,
+                byrow = FALSE)
+colnames(tabla) <- c("patadas", "puños", "agarres")
+rownames(tabla) <- c("Gimnasio A","Gimnasio B")
+print(tabla)
+
+# Calcular frecuencias
+
+i1j1 <- ((22+4+6)*(22+8))/n
+i2j1 <- ((22+8)*(8+14+10))/n
+i1j2 <- ((22+4+6)*(4+14))/n
+i2j2 <- ((8+14+10)*(4+14))/n
+i1j3 <- ((22+4+6)*(6+10))/n
+i2j3 <- ((8+14+10)*(6+10))/n
+
+frecuencias <- matrix(c(i1j1,i2j1,i1j2,i2j2,i1j3,i2j3),
+                nrow=2,
+                byrow = FALSE)
+colnames(frecuencias) <- c("patadas", "puños", "agarres")
+rownames(frecuencias) <- c("Gimnasio A","Gimnasio B")
+print(frecuencias)
+```
+
+Con las tablas realizadas, podemos observar cómo todas las frecuencias son mayores que 5, por lo que el requisito para la prueba de Chi-Cuadrado Homogeneidad se aprueba y se decide utilizar esta misma para el desarrollo de la pregunta.
+
+Hipótesis:
+
+- H0 (hipótesis nula): Los dos gimnasios tienen la misma proporción de luchadores en cada método de ataque.
+
+- Ha (hipótesis alternativa): Los dos gimnasios tienen distintas proporciones de luchadores en cada método de ataque.
+
+### Desarrollo
+
+```{r desarrollo-p3}
+prueba <- chisq.test(tabla)
+print(prueba)
+```
+
+### Conclusión
+
+Al momento de generar las tablas de secuencias observadas y evaluar la prueba correspondiente definida anteriormente, obtenemos un p-value: 0.001438, que es menor al nivel de significancia definido con un alpha = 0.05, lo que nos lleva a aceptar la H0 y rechazar la Ha, concluyendo que los dos gimnasios tienen la misma proporción de luchadores en cada método de ataque. 
+
+## Pregunta 4
+
+### Contexto y datos
+
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+
+**Indicación:** obtengan la muestra de 50 personas del archivo "EP04 Datos.csv", que se adjunta a esta tarea, usando la semilla 124.
+
+## Pregunta
+
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+
+### Analsisis realizado
+
+Analizando el enunciado y la pregunta exigida, primero sabemos que las muestras son independientes ya que serán seleccionadas al azar y el tamaño de la muestra será de 50, por lo tanto es mayor al minimo requerido para la prueba de "Q de cochran" por lo tanto se decide utilizar esta misma
+
+```{r Pregunta-4}
+# Leer el csv
+datos <- read.csv2("EP04 Datos.csv")
+```
+
+Hipótesis:
+
+- H0 (Hipótesis nula): Las proporciones de éxito son las mismas en todas las estrategías de marketing
+- HA (Hipótesis alternativa): Las proporciones de éxito son distintas en todas las estrategías de marketing
+
+### Desarrollo
+
+```{r desarrollo-p4}
+# Obtener la muestra con la semilla solicitada
+set.seed(124)
+muestra <- slice_sample(datos, n = 50)
+
+# Transformar los datos a formato largo
+datos_largos <- muestra %>%
+  pivot_longer(
+    cols = starts_with("estrategia"), # Selecciona las columnas de las 3 estrategias
+    names_to = "estrategia", # Nombre de la nueva columna de condiciones
+    values_to = "resultado" # Nombre de la nueva columna de respuestas
+  ) %>%
+  # Convertir la respuesta "A" a 1 y "R" a 0 para que la prueba funcione correctamente
+  mutate(resultado = ifelse(resultado == "A", 1, 0))
+
+# Asegurarse de que el id y la estrategia se interpreten como factores categóricos
+datos_largos$id <- as.factor(datos_largos$id)
+datos_largos$estrategia <- as.factor(datos_largos$estrategia)
+
+# Definir alfa y aplicar la prueba
+alfa <- 0.05
+
+prueba_qc <- cochran.qtest(resultado ~ estrategia | id,
+                           data = datos_largos, 
+                           alpha = alfa)
+
+# Mostrar el resultado
+print(prueba_qc)
+```
+
+### Conclusión
+
+Tras analizar los resultados de la prueba de Cochran, podemos ver que el resultado del p-value es de 0.0006433, siendo así menor a nuestro alpha de 0.05; por lo tanto, podemos decir que existe evidencia suficiente para concluir que las proporciones de aceptación no son iguales en todas las estrategias. Esto se ve reflejado en los resultados de la misma prueba de Cochran, en la cual vemos que al comparar las estrategias 2 y 3 da un p-value de 0.3616, la cual indica que no hay diferencia estadísticamente significativa entre estas estrategias, en cambio, que las comparaciones entre la estrategia 1 con la estrategia 2 y 1 con la estrategia 3 hay una diferencia significativa.
+
+## Pregunta incognita
+
+Al realizar un análisis completo de cada pregunta, logramos encontrar que la pregunta incógnita en nuestro caso es la pregunta número 3, la comparación de gimnasios A y B. En esta pregunta se menciona que las muestras son de gimnasios distintos pero de la misma cadena, si un usuario se inscribe a la cadena, puede ir a cualquiera de los gimnasios. Por lo tanto, con esto ya podemos saber que las muestras no son independientes. Con esto, nuestra prueba Chi-Cuadrado de Homogeneidad queda inválida y esto tiene sentido, ya que nuestra conclusión aceptando la hipótesis nula como verdadera es contradictoria con lo que nosotros encontramos de forma descriptiva, demostrando que la hipótesis nula era falsa desde un inicio. Para poder realizar el estudio, el único cambio necesario sería tomar las muestras de dos gimnasios de cadenas distintas, así ningún cliente del gimnasio A podría ir al gimnasio B y se genera la independencia entre las muestras. 
+

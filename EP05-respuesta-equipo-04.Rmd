@@ -1,0 +1,223 @@
+---
+title: "EP05-respuesta-equipo4"
+output: html_document
+date: "2026-10-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggpubr)
+library(pwr)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(dplyr)
+library(car)
+library(rstatix)
+```
+
+```{r leer_csv}
+datos = read.csv2("EP05 datos.csv")
+```
+
+En cada invierno, los días se seleccionaron aleatoriamente, asegurando una distancia de entre 4 y 7 días entre observaciones para que puedan considerarse independientes.
+
+# Link discusión con IA
+
+Se decidió usar la IA para debatir los métodos utilizados en la pregunta 1.
+
+https://share.gemini.google/V1qQCRVD3kGu
+
+# Pregunta 1
+
+En la estación Las Condes, ¿la concentración diaria promedio de MP2,5 fue la misma en los inviernos de 2018, 2020, 2022 y 2023? En particular, interesa comparar cada uno de los otros inviernos con el de 2020, el de las cuarentenas por la pandemia. Si filtraron bien los datos, deberían obtener: 2018, n = 22 y media 25,91; 2020, n = 23 y media 18,35; 2022, n = 23 y media 28,91; 2023, n = 25 y media 23,96 [µg/m³N].
+
+### Analisis hecho en clase
+
+Se debe aplicar una prueba RM ANOVA de una vía para muestras independientes, ya que las muestras se realizan en los mismos sectores, pero en momentos (años) distintos y cada año mide días distintos, con esto no hay relación entre las muestras, entonces usaremos la prueba omnibus ANOVA para muestras correlacionadas. Con esto mismo se decide usar Post Hoc HSD de Tukey, ya que son muestras independientes. Anteriormente analizamos las muestras como correlacionadas y el chat con la IA nos hizo dudar y con esto volvimos a analizar y concluimos que son independientes. Para post hoc tenemos que revisar cada media de cada año con la del año 2020, como pide la pregunta.
+
+### Hipótesis ANOVA
+
+H0 (hipótesis nula): La concentración diaria promedio de MP2,5 fue la misma en los inviernos de 2018, 2020, 2022 y 2023.
+
+Ha (hipótesis alternativa): La concentración diaria promedio de MP2,5 difiere en al menos uno de los años 2018, 2020, 2022 y 2023.
+
+### hipótesis POST HOC
+
+H0 (hipótesis nula): Las medias de cada par de años con el año de 2020 son iguales.
+
+Ha (hipótesis alternativa): Al menos una de las medias de los años difiere al compararla con la del año 2020.
+
+### Desarrollo
+
+```{r pregunta1-1}
+# Filtrar las condes 
+datos_filtrados <- datos %>%
+  filter(estacion == "Las Condes", invierno %in% c(2018, 2020, 2022, 2023)) %>%
+  mutate(invierno = as.factor(invierno)) # Convertir la variable en factor ya que es una variable categorica
+
+# Resumen de los datos filtrados para comprobar que están bien (viendo los datos de la pregunta)
+resumen <- datos_filtrados %>%
+  group_by(invierno) %>%
+  summarise(
+    n = n(),
+    media = mean(mp25)
+  )
+print(resumen)
+
+# Comprobar distribución normal en los grupos (requisito de anova)
+normalidad_por_grupo <- datos_filtrados %>%
+  group_by(invierno) %>%
+  summarise(
+    p_value_shapiro = shapiro.test(mp25)$p.value
+  )
+print(normalidad_por_grupo)
+
+# Comprobar homocedasticidad (varianzas iguales)
+prueba_homocedasticidad <- leveneTest(mp25 ~ invierno, data = datos_filtrados)
+print(prueba_homocedasticidad)
+```
+
+Como se puede ver en los datos anteriores, se cumple la normalidad en los grupos y la homocedasticidad, por lo que nuestro análisis era correcto y se puede aplicar la prueba ANOVA y POST HOC que mencionamos anteriormente. Primero, los resultados de normalidad en cada grupo: hay valores mayores a 0.05, por lo tanto, se confirma que hay normalidad, y por parte de los resultados de homocedasticidad, igualmente se puede observar que el valor p es mucho mayor a 0.05, por lo tanto, se acepta la homocedasticidad en los datos.
+
+```{r pregunta1-2}
+# Aplicar prueba anova
+modelo_anova <- aov(mp25 ~ invierno, data = datos_filtrados)
+summary(modelo_anova)
+
+# Aplicar prueba post hoc
+post_hoc <- TukeyHSD(modelo_anova)
+print(post_hoc)
+```
+
+### Conclusión ANOVA
+
+Primero, analizando los resultados de ANOVA, podemos observar que el resultado fue menor a 0.05, por lo tanto, se rechaza la hipótesis nula de la prueba ANOVA, así podemos decir que existe evidencia estadística suficiente para afirmar que la concentración diaria promedio de MP2,5 no fue la misma en todos los inviernos. Al menos uno de los años (2018, 2020, 2022 o 2023) difiere significativamente del resto, lo que justifica revisar la prueba Post Hoc.
+
+### Conclusión POST HOC
+
+Analizando los resultados de POST HOC, más que nada las comparativas hechas con el año 2020 (ya que es el año de interés de la pregunta). Se puede observar lo siguiente:
+
+- 2020 vs 2018: Su valor p es 0.109. Como es **mayor** a 0.05, no se rechaza la hipótesis nula para este par. No hay una diferencia estadísticamente significativa en la concentración de MP2,5 entre el invierno de 2018 y el de 2020.
+
+- 2022 vs 2020: Su valor p es 0.009. Como es **menor** a 0.05, se rechaza la hipótesis nula. Existe una diferencia estadísticamente significativa; específicamente, la concentración de MP2,5 fue significativamente mayor en 2022 que en 2020 (con una diferencia de medias estimada de 10.56).
+
+- 2023 vs 2020: Su valor p es 0.304. Como es **mayor** a 0.05, no se rechaza la hipótesis nula. No hay diferencia estadísticamente significativa entre el invierno de 2023 y el de 2020.
+
+Por lo tanto, el único año que tiene una diferencia estadísticamente significativa con respecto al año 2020 es el año 2022, con un p-value de 0.009. Con una diferencia de 10.56 de concentración MP2,5.
+
+# Pregunta 2
+
+En el invierno de 2022, ¿la concentración diaria promedio de MP2,5 fue la misma en las estaciones La Florida, Parque O'Higgins y Quilicura? En particular, interesa comparar cada una de las otras estaciones con la de Parque O'Higgins. Si filtraron bien los datos, deberían obtener: La Florida, n = 23 y media 44,74; Parque O'Higgins, n = 23 y media 43,74; Quilicura, n = 23 y media 45,00 [µg/m³N].
+
+### Analisis en hecho en clase
+
+Analizando el contexto, en este caso tenemos muestras del mismo año, cada una el mismo día, pero en distintos lugares. Con esto consideramos las muestras correlacionadas, ya que la gente que no está en una estación, puede estar en cualquier otra, ya que son las mismas fechas. Con esto decidimos usar ANOVA de muestras correlacionadas. Luego, por parte del Post Hoc, decidimos utilizar t test comparando las estaciones "Quilicura" con "Parque O'Higgins" y "Quilicura" con "La Florida". Así ya comparamos cada par que exige la pregunta y cumplimos con cubrir todas las muestras con Post Hoc.
+
+### Hipótesis ANOVA
+
+H0 (hipótesis nula): En promedio, no hay diferencias entre las medidas de las estaciones La Florida, Parque O'Higgins y Quilicura.
+
+Ha (hipótesis alternativa): En al menos uno de los pares de estaciones, La Florida, Parque O'Higgins y Quilicura, hay una diferencia en el promedio de MP2,5.
+
+
+### Hipótesis POST HOC
+
+H0 (hipótesis nula): Las medias de cada par de estaciones La Florida, Parque O'Higgins y Quilicura, son iguales.
+
+Ha (hipótesis alternativa): En al menos uno de los pares de estaciones, La Florida, Parque O'Higgins y Quilicura, la media es distinta.
+
+## Desarrollo
+
+```{r pregunta2-1}
+# Filtrar los datos: Invierno 2022 y estaciones requeridas
+datos_filtrados2 <- datos %>%
+  filter(invierno == 2022, estacion %in% c("La Florida", "Parque O'Higgins", "Quilicura")) %>%
+  mutate(
+    fecha = factor(fecha), # Identificador del "caso" o instancia
+    estacion = factor(estacion)
+  ) %>%
+  select(fecha, estacion, mp25)
+
+# Comprobar valores estadisticos con los del enunciado
+resumen2 <- datos_filtrados2 %>%
+  group_by(estacion) %>%
+  summarise(
+    n = n(),
+    media = mean(mp25)
+  )
+print(resumen2)
+
+# Prueba de Normalidad entre las diferencias de cada grupo
+# Crear matriz de diferencias entre estaciones para cada fecha (Script 9.5 de la Lectura 6)
+diferencias <- datos_filtrados2 %>%
+  pivot_wider(names_from = estacion, values_from = mp25) %>%
+  mutate(
+    `La Florida-Parque O'Higgins` = `La Florida` - `Parque O'Higgins`,
+    `La Florida-Quilicura`  = `La Florida` - `Quilicura`,
+    `Parque O'Higgins-Quilicura`  = `Parque O'Higgins` - `Quilicura`
+  ) %>%
+  pivot_longer(c(`La Florida-Parque O'Higgins`, `La Florida-Quilicura`, `Parque O'Higgins-Quilicura`), names_to = "Par", values_to = "Diferencia")
+
+# Evaluar la normalidad en las diferencias
+normalidad_diferencias <- diferencias %>%
+  group_by(Par) %>%
+  summarise(p_value_shapiro = shapiro.test(Diferencia)$p.value)
+
+print(normalidad_diferencias)
+
+# Comprobar las varianzas
+datos_varianzas <- datos_filtrados2 %>%
+  pivot_wider(names_from = estacion, values_from = mp25) %>%
+  mutate(
+    `La Florida-Parque O'Higgins` = `La Florida` - `Parque O'Higgins`,
+    `La Florida-Quilicura` = `La Florida` - `Quilicura`,
+    `Parque O'Higgins-Quilicura` = `Parque O'Higgins` - `Quilicura`
+  ) %>%
+  pivot_longer(c(`La Florida-Parque O'Higgins`, `La Florida-Quilicura`, `Parque O'Higgins-Quilicura`), names_to = "Par", values_to = "Diferencia")
+
+# Mostrar varianzas de los grupos
+varianzas <- datos_varianzas %>% 
+  group_by(Par) %>%
+  summarise(Varianza = var(Diferencia, na.rm = TRUE))
+print(varianzas)
+
+# Hacer la razón de varianzas entre el maxy el min
+var_max <- max(varianzas$Varianza)
+var_min <- min(varianzas$Varianza)
+razon_var <- var_max / var_min
+print(round(razon_var,2))
+```
+
+La normalidad de las diferencias por grupo supera el p-value de 0.05, así que se confirma normalidad en todas. En el caso de las varianzas, la razón da un resultado de 3.6, el cual es mucho mayor a 1 (el ideal para esfericidad), por lo tanto, hay que hacer un ajuste antes de aplicar las pruebas deseadas.
+
+```{r pregunta2-2}
+# Aplicar la prueba ANOVA
+anova_cor <- datos_filtrados2 %>% 
+  anova_test(dv = mp25, wid = fecha, within = estacion, detailed = TRUE)
+print(anova_cor)
+```
+
+Como se puede observar en el valor GGe del test realizado, el valor de GGe supera 0.6, por lo tanto, no se recomienda utilizar la corrección de Greenhouse-Geisser, y ambos valores GGe están cercanos y uno sobre 0.75, por lo tanto, se decide usar una corrección de Huynh-Feldt.
+
+```{r pregunta2-3}
+# Aplicar la prueba post hoc
+post_hoc2 <- pairwise.t.test(
+  x = datos_filtrados2$mp25, 
+  g = datos_filtrados2$estacion, 
+  paired = TRUE
+)
+print(post_hoc2)
+```
+
+### Conclusión ANOVA
+
+Basado en los resultados obtenidos de la prueba ANOVA, podemos darnos cuenta de que tiene un p-value de 0.631, por lo tanto, rechazamos la hipótesis nula considerando la alternativa, es decir, que en conclusión tenemos la evidencia suficiente para rechazar que en promedio no hay diferencias entre las medidas de las estaciones La Florida, Parque O'Higgins y Quilicura.
+
+Algo a destacar es que el valor E que nos ayuda a definir qué corrección ocupar en este caso, tanto la [GG] como la [HF], son muy cercanas, por lo tanto, que, independiente de la prueba que ocupamos, podemos darnos cuenta de que en los dos casos se hubiera rechazado la HO al haber un p-value mayor a 0.05.
+
+### Conclusión POST HOC
+
+Analizando los resultados, podemos observar que cada par evaluado en los t-test supera el p-value de 0.05, por lo tanto, tenemos evidencia suficiente para rechazar que las medias de cada par de estaciones La Florida, Parque O'Higgins y Quilicura, son iguales. Si analizamos el p-value de manera individual con cada par, podemos rechazar que cada par es igual entre sí (en palabras simples, por ejemplo, nada confirma que La Florida y Quilicura tengan el mismo MP2,5 medio).
+
+

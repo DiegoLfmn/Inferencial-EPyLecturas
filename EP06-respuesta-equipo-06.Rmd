@@ -1,0 +1,653 @@
+---
+title: "EP06-respuesta-equipo-06"
+author: "Equipo 06"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+if (!requireNamespace("car", quietly = TRUE)) install.packages("car")
+library(car)
+library(dplyr)
+library(tidyr)
+library(ggpubr)
+library(rstatix)
+#install.packages("coin")
+library(coin)
+```
+
+```{r}
+datos <- read.csv("EP06 Datos.csv")
+
+d50 <- subset(datos, n.nodos >= 50)
+d60 <- subset(datos, n.nodos >= 60)
+d70 <- subset(datos, n.nodos >= 70)
+```
+
+## Pregunta 1
+
+Considerando las instancias con 50 o más nodos, ¿hay diferencias entre las mejores soluciones que encuentran las versiones A y C del algoritmo cuando resuelven las mismas instancias? Con la semilla 629, saquen 21 instancias y usen sus resultados con las dos versiones. Si sacaron bien la muestra, deberían obtener: n = 21; A, media 98,44; C, media 97,443 [% del óptimo].
+
+#### Respuesta:
+
+La muestra tiene 21 instancias y las mismas se usan con A y C, por lo que las muestras son pareadas.
+
+```{r}
+set.seed(629)
+i1 <- sample(1:nrow(d50), 21)
+m1 <- d50[i1, c("instancia", "mejor.A", "mejor.C")]
+m1$diferencia <- m1$mejor.A - m1$mejor.C
+
+print(m1, row.names = FALSE)
+c(n = nrow(m1), media_A = mean(m1$mejor.A), media_C = mean(m1$mejor.C))
+```
+
+Se obtiene $n = 21$, media de A $= 98,440$ y media de C $= 97,443$ % del óptimo.
+
+#### Prueba paramétrica
+
+Correspondería la prueba $t$ de Student para muestras pareadas. Sus condiciones son: variable continua, pares independientes y normalidad de las diferencias.
+
+$H_0$: La diferencia media poblacional entre A y C es igual a 0.
+
+$H_a$: La diferencia media poblacional entre A y C es distinta de 0.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque las 21 instancias se eligen al azar y son distintas. El histograma y el Q-Q permiten revisar la normalidad de las diferencias, y el boxplot ayuda a detectar valores atípicos.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+plot(m1$mejor.C, m1$mejor.A, pch = 16, col = "steelblue",
+     xlab = "Versión C (% del óptimo)", ylab = "Versión A (% del óptimo)",
+     main = "A vs C en cada instancia")
+abline(0, 1, col = "red", lty = 2)
+
+boxplot(m1$diferencia, col = "lightblue",
+        ylab = "Diferencia A - C (% del óptimo)",
+        main = "Diferencias pareadas")
+stripchart(m1$diferencia, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+hist(m1$diferencia, col = "lightgray",
+     main = "Distribución de las diferencias", xlab = "Diferencia A - C")
+
+qqnorm(m1$diferencia, pch = 16, main = "Q-Q de las diferencias")
+qqline(m1$diferencia, col = "red")
+```
+
+El histograma y el Q-Q muestran una cola derecha marcada, sugiere que la normalidad de las diferencias no se cumple. Se aplica Shapiro-Wilk:
+
+```{r}
+shapiro.test(m1$diferencia)
+```
+
+El p-valor es $0,0024 < 0,05$, por lo que se rechaza la normalidad de las diferencias. No se cumplen las condiciones y no se aplica la prueba $t$.
+
+#### Prueba basada en rangos e hipótesis (No parametrica)
+
+Como se solicita, se aplica la prueba no parametrica elegida. Prueba de Wilcoxon de rangos con signo para muestras pareadas.
+
+$H_0$: La mediana de las diferencias $A-C$ es igual a 0.
+
+$H_a$: La mediana de las diferencias $A-C$ es distinta de 0.
+
+Respecto a las condiciones como vimos se cumple la indepencia y la escala de las mediciones es al menos ordinal.
+
+```{r}
+p1_datos_long <- m1 %>%
+  select(instancia, mejor.A, mejor.C) %>%
+  pivot_longer(cols = c(mejor.A, mejor.C), names_to = "Version", values_to = "Calidad")
+
+p1_wilcox <- p1_datos_long %>%
+  rstatix::wilcox_test(Calidad ~ Version, paired = TRUE, detailed = TRUE)
+print(p1_wilcox)
+
+p1_effsize <- p1_datos_long %>%
+  wilcox_effsize(Calidad ~ Version, paired = TRUE)
+print(p1_effsize)
+
+```
+Con un nivel de significancia $0.05$, la prueba de rangos con signo de Wilcoxon, revela que existen diferencias estadisticamente significativas en la calidad de la mejor solucion encontrada entre las versiones A y C del algoritmo(p-value = 0.00801), rechazando $H_0$ en favor de $H_a$. Ademas el tamaño del efecto $0.565$ indica que la diferencia es grande
+
+
+## Pregunta 2
+
+Considerando las instancias con 50 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A, B y C del algoritmo? Con la semilla 252, saquen 14 instancias para la versión A, 12 instancias para la versión B y 15 instancias para la versión C, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 14 y media 1.390.960; B, n = 12 y media 1.842.236; C, n = 15 y media 1.113.248 [ms].
+
+#### Respuesta:
+
+Se seleccionan 41 instancias distintas: 14 para A, 12 para B y 15 para C. Cada instancia se usa en una sola versión, por lo que las muestras son independientes.
+
+```{r}
+set.seed(252)
+i2 <- sample.int(nrow(d50), 41)
+
+m2 <- data.frame(
+  instancia = d50$instancia[i2],
+  version = factor(rep(c("A", "B", "C"), c(14, 12, 15)),
+                   levels = c("A", "B", "C")),
+  tiempo = c(d50$tiempo.A[i2[1:14]], d50$tiempo.B[i2[15:26]],
+             d50$tiempo.C[i2[27:41]])
+)
+
+print(m2, row.names = FALSE)
+tapply(m2$tiempo, m2$version, mean)
+```
+
+Se obtiene A, $n = 14$ y media $1.390.960$; B, $n = 12$ y media $1.842.236$; C, $n = 15$ y media $1.113.248$ ms.
+
+#### Prueba paramétrica
+
+Correspondería un ANOVA de un factor. Sus condiciones son independencia, normalidad en cada grupo y homocedasticidad.
+
+$H_0$: El tiempo medio de ejecución es igual en las tres versiones.
+
+$H_a$: Al menos una versión tiene un tiempo medio de ejecución distinto.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque cada instancia se usa en una sola versión. Los boxplots permiten comparar la dispersión entre grupos y detectar valores atípicos; los Q-Q permiten revisar la normalidad de cada grupo.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+boxplot(tiempo ~ version, data = m2,
+        col = c("lightblue", "moccasin", "palegreen"),
+        xlab = "Versión", ylab = "Tiempo (ms)",
+        main = "Tiempos por versión")
+stripchart(tiempo ~ version, data = m2, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+qqnorm(m2$tiempo[m2$version == "A"], pch = 16, main = "Q-Q versión A")
+qqline(m2$tiempo[m2$version == "A"], col = "red")
+
+qqnorm(m2$tiempo[m2$version == "B"], pch = 16, main = "Q-Q versión B")
+qqline(m2$tiempo[m2$version == "B"], col = "red")
+
+qqnorm(m2$tiempo[m2$version == "C"], pch = 16, main = "Q-Q versión C")
+qqline(m2$tiempo[m2$version == "C"], col = "red")
+```
+
+Los tiempos son asimétricos hacia la derecha. La versión B tiene la mediana más alta, la version A la más baja, aunque su media supera a la de C por algunas observaciones extremas. Los Q-Q muestran desviaciones de la normalidad, sobre todo en A. Los boxplots no muestran diferencias extremas de dispersión. Para contrastar:
+
+```{r}
+shapiro.test(m2$tiempo[m2$version == "A"])
+shapiro.test(m2$tiempo[m2$version == "B"])
+shapiro.test(m2$tiempo[m2$version == "C"])
+leveneTest(tiempo ~ version, data = m2)
+```
+
+La normalidad se rechaza en A ($p = 0,0263 < 0,05$); en B y C no se rechaza. Levene no rechaza la igualdad de varianzas ($p = 0,292$). Como falla la normalidad en A, no se cumplen las condiciones y no se aplica el ANOVA.
+
+#### Prueba basada en rangos e hipótesis
+
+Se usaría la prueba de Kruskal-Wallis.
+
+$H_0$: Las distribuciones (medianas) del tiempo de ejecución son iguales para A, B y C.
+
+$H_a$: Al menos una versión tiene una distribución (mediana) del tiempo de ejecución distinta.
+
+```{r}
+#Prueba de kruskal-wallis
+p2_kw <- m2 %>% 
+  rstatix::kruskal_test(tiempo ~ version)
+print(p2_kw)
+
+#Tamaño del Efecto
+p2_eff <- m2 %>% 
+  rstatix::kruskal_effsize(tiempo ~ version)
+print(p2_eff)
+```
+Con un nivel de significancia de $0.05$, la prueba de Kruskall-Wallis muestra que no existen diferencias significativas en los tiempos de ejecucion de las tres versiones del algoritmo (p-value = 0.325). Con un tamaño del efecto $0.00645$, confirma que la magnitud de las diferencias es práctimente nula
+```{r}
+#Post hoc
+p2_post <- m2 %>% 
+  rstatix::pairwise_wilcox_test(tiempo ~ version, p.adjust.method = "holm") %>%
+  mutate(p.BH = p.adjust(p, method = "BH")) %>%
+  select(group1, group2, n1, n2, statistic, p, p.adj, p.BH)
+print(p2_post)
+```
+Mediante la prueba post-hoc, confirman que ningun par de versiones muestra alguna diferencia significativa en su tiempo de ejecucion(A vs B, p.adj = 0.548. A vs C, p.adj = 0.949. B vs C, p.adj = 0.457). Por lo tanto, no hay evidencia suficiente para afirmar que alguna versión sea mas rápida o mas lenta que las demas instancias
+
+## Pregunta 3
+
+Considerando las instancias con 70 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A, B y C del algoritmo? Con la semilla 533, saquen 16 instancias para la versión A, 14 instancias para la versión B y 12 instancias para la versión C, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 16 y media 1.220.181; B, n = 14 y media 2.553.956; C, n = 12 y media 1.084.448 [ms].
+
+#### Respuesta:
+
+Se seleccionan 42 instancias distintas: 16 para A, 14 para B y 12 para C. Cada instancia se usa en una sola versión, por lo que las muestras son independientes.
+
+```{r}
+set.seed(533)
+i3 <- sample.int(nrow(d70), 42)
+
+m3 <- data.frame(
+  instancia = d70$instancia[i3],
+  version = factor(rep(c("A", "B", "C"), c(16, 14, 12)),
+                   levels = c("A", "B", "C")),
+  tiempo = c(d70$tiempo.A[i3[1:16]], d70$tiempo.B[i3[17:30]],
+             d70$tiempo.C[i3[31:42]])
+)
+
+print(m3, row.names = FALSE)
+tapply(m3$tiempo, m3$version, mean)
+```
+
+Se obtiene A, $n = 16$ y media $1.220.181$; B, $n = 14$ y media $2.553.956$; C, $n = 12$ y media $1.084.448$ ms.
+
+#### Prueba paramétrica
+
+Correspondería un ANOVA de un factor. Sus condiciones son independencia, normalidad en cada grupo y homocedasticidad.
+
+$H_0$: El tiempo medio de ejecución es igual en las tres versiones.
+
+$H_a$: Al menos una versión tiene un tiempo medio de ejecución distinto.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque cada instancia se usa en una sola versión. Los boxplots permiten comparar la dispersión entre grupos y detectar valores atípicos; los Q-Q permiten revisar la normalidad de cada grupo.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+boxplot(tiempo ~ version, data = m3,
+        col = c("lightblue", "moccasin", "palegreen"),
+        xlab = "Versión", ylab = "Tiempo (ms)",
+        main = "Tiempos por versión")
+stripchart(tiempo ~ version, data = m3, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+qqnorm(m3$tiempo[m3$version == "A"], pch = 16, main = "Q-Q versión A")
+qqline(m3$tiempo[m3$version == "A"], col = "red")
+
+qqnorm(m3$tiempo[m3$version == "B"], pch = 16, main = "Q-Q versión B")
+qqline(m3$tiempo[m3$version == "B"], col = "red")
+
+qqnorm(m3$tiempo[m3$version == "C"], pch = 16, main = "Q-Q versión C")
+qqline(m3$tiempo[m3$version == "C"], col = "red")
+
+```
+
+La versión B tiene los tiempos más altos y A presenta una observación extrema. Las distribuciones son asimétricas y con colas derechas. El Q-Q de A se aleja de la línea y los boxplots sugieren mayor dispersión en A, aunque Levene no rechaza la igualdad. Para contrastar:
+
+```{r}
+shapiro.test(m3$tiempo[m3$version == "A"])
+shapiro.test(m3$tiempo[m3$version == "B"])
+shapiro.test(m3$tiempo[m3$version == "C"])
+leveneTest(tiempo ~ version, data = m3)
+```
+
+La normalidad se rechaza en A ($p = 3,03 * 10^{-5} < 0,05$); en B y C no se rechaza. Levene no rechaza la igualdad de varianzas ($p = 0,533$). Como falla la normalidad en A, no se cumplen las condiciones y no se aplica el ANOVA.
+
+#### Prueba basada en rangos e hipótesis (No parametrica)
+
+Como se solicita, se aplica la prueba no parametrica elegida. Prueba de Kruskal-Wallis.
+
+$H_0$: Las distribuciones (medianas) del tiempo de ejecución son iguales para A, B y C.
+
+$H_a$: Al menos una versión tiene una distribución (mediana) del tiempo de ejecución distinta.
+
+Respecto a las condiciones, las muestras son independientes entre si como se indica en la misma pregunta, la escala de variables es a lo menos ordinal, y la variable independiente tiene al menos dos niveles.
+
+```{r}
+p3_kw <- kruskal_test(tiempo ~ version, data = m3)
+print(p3_kw)
+
+p3_eff <- kruskal_effsize(tiempo ~ version, data = m3)
+print(p3_eff)
+
+p3_post <- pairwise_wilcox_test(tiempo ~ version, data = m3, p.adjust.method = "holm")
+p3_post$p.BH <- p.adjust(p3_post$p, method = "BH")
+print(p3_post)
+```
+Con un nivel de significancia $0,05$, la prueba de Kruskal-Wallis demuestra que existen diferencias estadísticamente significativas en los tiempos de ejecución entre las versiones del algoritmo en instancias de 70 o más nodos (p = 0,0001616). El tamaño del efecto $0,396$ indica que la diferencia práctica entre las versiones es grande.
+
+El análisis post-hoc mediante pruebas de suma de rangos de Wilcoxon con ajuste de Holm muestra que la versión B requiere tiempos de ejecución significativamente mayores que la versión A (p.adj = 0,000314) y que la versión C (p.adj = 0,000314). No se observan diferencias significativas entre los tiempos de ejecución de las versiones A y C (p.adj = 0,507). 
+
+
+
+## Pregunta 4
+
+Considerando las instancias con 50 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A y B del algoritmo? Con la semilla 959, saquen 15 instancias para la versión A y 17 instancias para la versión B, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 15 y media 784.091,4; B, n = 17 y media 1.774.649 [ms].
+
+#### Respuesta:
+
+Se seleccionan 32 instancias distintas: 15 para A y 17 para B. Cada instancia se usa en una sola versión, por lo que las muestras son independientes.
+
+```{r}
+set.seed(959)
+i4 <- sample.int(nrow(d50), 32)
+
+m4 <- data.frame(
+  instancia = d50$instancia[i4],
+  version = factor(rep(c("A", "B"), c(15, 17)), levels = c("A", "B")),
+  tiempo = c(d50$tiempo.A[i4[1:15]], d50$tiempo.B[i4[16:32]])
+)
+
+print(m4, row.names = FALSE)
+tapply(m4$tiempo, m4$version, mean)
+```
+
+Se obtiene A, $n = 15$ y media $784.091,4$; B, $n = 17$ y media $1.774.649$ ms.
+
+#### Prueba paramétrica
+
+Correspondería la prueba $t$ de Student para muestras independientes. Sus condiciones son independencia, normalidad en cada grupo y homocedasticidad.
+
+$H_0$: El tiempo medio de ejecución es igual en A y B.
+
+$H_a$: El tiempo medio de ejecución difiere entre A y B.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque cada instancia se usa en una sola versión. El boxplot permite comparar la dispersión entre grupos y detectar valores atípicos; los Q-Q permiten revisar la normalidad de cada grupo.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+
+boxplot(tiempo ~ version, data = m4,
+        col = c("lightblue", "moccasin"),
+        xlab = "Versión", ylab = "Tiempo (ms)",
+        main = "Tiempos por versión")
+stripchart(tiempo ~ version, data = m4, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+qqnorm(m4$tiempo[m4$version == "A"], pch = 16, main = "Q-Q versión A")
+qqline(m4$tiempo[m4$version == "A"], col = "red")
+
+qqnorm(m4$tiempo[m4$version == "B"], pch = 16, main = "Q-Q versión B")
+qqline(m4$tiempo[m4$version == "B"], col = "red")
+```
+
+B tiene una mediana y una dispersión mayores que A. Ambas distribuciones son asimétricas hacia la derecha y el Q-Q de A se aparta de la línea. El boxplot sugiere mayor dispersión en B, aunque Levene no rechaza la igualdad. Para contrastar formalmente:
+
+```{r}
+shapiro.test(m4$tiempo[m4$version == "A"])
+shapiro.test(m4$tiempo[m4$version == "B"])
+leveneTest(tiempo ~ version, data = m4)
+```
+
+La normalidad se rechaza en A ($p = 0,0056 < 0,05$); en B no se rechaza ($p = 0,072$). Levene no rechaza la igualdad de varianzas ($p = 0,088$). Como falla la normalidad en A, no se cumplen las condiciones y no se aplica la prueba $t$.
+
+#### Prueba basada en rangos e hipótesis
+
+Finalmente se selecciona la prueba U de Mann-Whitney.
+
+$H_0$: las distribuciones (medianas) del tiempo de ejecución son iguales para A y B.
+
+$H_a$: las distribuciones (medianas) del tiempo de ejecución difieren entre A y B.
+
+#### Transformada
+
+Como falla la normalidad en la escala original, se estima un parametro lambda de Box-Cox conjunto para ambos grupos a través de un modelo lineal
+
+```{r}
+#Estimar un solo Lambda de Box-Cox para los dos grupos
+bc_p4 <- powerTransform(lm(tiempo ~ version, data = m4))
+summary(bc_p4)
+```
+
+
+Se selecciona la transformación logarítmica ya que al analizar los graficos podemos notar una asimetria hacia la derecha.
+Además se cumple la restricción de que los valores sean positivos.
+
+```{r}
+m4 <- m4 %>% mutate (log_t = log(tiempo))
+print(m4)
+```
+
+
+#### Verificacion de condiciones en la escala transformada
+
+Volvemos a revisar la normalidad y homocedasticidad sobre la variable transformada
+```{r}
+#Comprobar normalidad en la escala transformada
+shapiro.test(m4$log_t[m4$version == "A"])
+shapiro.test(m4$log_t[m4$version == "B"])
+
+#Comprobar igualdad de varianzas en la escala transformada
+leveneTest(log_t ~ version, data = m4)
+```
+Como notamos en la normalidad en A($p = 0.6243 > 0.05$) y en B ($p = 0.2474 > 0.05$). Ambas presentan una distribución normal para la escala logaritmica
+
+Ademas con el Levene Test, con un $p = 0.1888 > 0.05$, se cumple la igualdad de varianzas entre dos grupos en la nueva escala
+
+
+#### Hipótesis para la escala transformada
+
+Las nuevas hipotesis para la escala logaritmica serian: 
+
+$H_0$: La media del logaritmo del tiempo de ejecución es igual para las versiones A y B
+
+$H_a$: La media del logaritmo del tiempo de ejecución difiere entre las versiones A y B
+
+```{r}
+prueba_t_p4 <- m4 %>%
+  rstatix::t_test(log_t ~ version, var.equal = TRUE, detailed = TRUE) %>%
+  mutate(razon_medias_geo = exp(estimate),
+         razon_inf = exp(conf.low),
+         razon_sup = exp(conf.high))
+
+print(prueba_t_p4)
+```
+Con un nivel de significancia $0.05$, la prueba t de Student aplicada sobre los datos transformados logarítmicamente demuestra diferencias estadísticamente significativas en los tiempos de ejecución entre ambas versiones ($p = 0.00455$).
+
+al revertir el resultado a la escala original con la funcion exponencial, la razón entre las medias geometricas es $0.340$. Indicando que la media geométrica del tiempo de ejecución de la versión A equivale aproximadamente al $34\%$ del tiempo de la versión B. Por lo tanto, la version A es significativamente mas rapida que la version B.
+
+
+
+## Pregunta 5
+
+Considerando las instancias con 60 o más nodos, ¿hay diferencias entre las mejores soluciones que encuentran las versiones A, B y C del algoritmo cuando resuelven las mismas instancias? Con la semilla 129, saquen 18 instancias y usen sus resultados con las tres versiones. Si sacaron bien la muestra, deberían obtener: n = 18; A, media 98,172; B, media 97,703; C, media 96,608 [% del óptimo].
+
+#### Respuesta:
+
+Se seleccionan 18 instancias y las mismas se usan con A, B y C, por lo que las muestras son pareadas (bloques).
+
+```{r}
+set.seed(129)
+i5 <- sample(1:nrow(d60), 18)
+m5 <- d60[i5, c("instancia", "mejor.A", "mejor.B", "mejor.C")]
+
+m5_largo <- data.frame(
+  instancia = factor(rep(m5$instancia, 3)),
+  version = factor(rep(c("A", "B", "C"), each = 18), levels = c("A", "B", "C")),
+  calidad = c(m5$mejor.A, m5$mejor.B, m5$mejor.C)
+)
+
+print(m5, row.names = FALSE)
+tapply(m5_largo$calidad, m5_largo$version, mean)
+```
+
+Se obtiene $n = 18$; A, media $98,172$; B, media $97,703$; C, media $96,608$ % del óptimo.
+
+#### Prueba paramétrica
+
+Correspondería un ANOVA de medidas repetidas (o de bloques completos). Sus condiciones son independencia entre bloques, normalidad de los residuos y esfericidad.
+
+$H_0$: El porcentaje medio del óptimo es igual en las tres versiones.
+
+$H_a$: Al menos una versión tiene un porcentaje medio del óptimo distinto.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque las 18 instancias se eligen al azar y son distintas. El gráfico de perfiles muestra la estructura de bloques; el boxplot compara la dispersión entre versiones; el boxplot de diferencias por pares ayuda a ver si las varianzas de las diferencias son similares (esfericidad); y el Q-Q de residuos revisa la normalidad.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+boxplot(calidad ~ version, data = m5_largo,
+        col = c("lightblue", "moccasin", "palegreen"),
+        xlab = "Versión", ylab = "% del óptimo",
+        main = "Calidad por versión")
+stripchart(calidad ~ version, data = m5_largo, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+boxplot(list("A - B" = m5$mejor.A - m5$mejor.B,
+             "A - C" = m5$mejor.A - m5$mejor.C,
+             "B - C" = m5$mejor.B - m5$mejor.C),
+        col = c("lightblue", "moccasin", "palegreen"),
+        ylab = "Diferencia (% del óptimo)",
+        main = "Diferencias por pares")
+
+modelo5 <- lm(calidad ~ version + instancia, data = m5_largo)
+res5 <- residuals(modelo5)
+qqnorm(res5, pch = 16, main = "Q-Q de los residuos")
+qqline(res5, col = "red")
+```
+
+El boxplot de diferencias por pares muestra que A-C y B-C tienen mayor dispersión que A-B, lo que sugiere que la esfericidad no se cumple. El Q-Q de residuos se aparta de la línea en los extremos. Para contrastar formalmente:
+
+```{r}
+shapiro.test(res5)
+
+M5 <- as.matrix(m5[, c("mejor.A", "mejor.B", "mejor.C")])
+mauchly.test(lm(M5 ~ 1), X = ~1)
+```
+
+La normalidad de los residuos se rechaza ($p = 0,0187 < 0,05$) y Mauchly rechaza la esfericidad ($p = 0,0286 < 0,05$). No se cumplen las condiciones y no se aplica el ANOVA.
+
+#### Prueba basada en rangos e hipótesis
+
+Se usaría la prueba de Friedman.
+
+$H_0$: las distribuciones (medianas) del porcentaje del óptimo son iguales para A, B y C cuando resuelven las mismas instancias.
+
+$H_a$: al menos una versión tiene una distribución (mediana) del porcentaje del óptimo distinta.
+
+
+```{r}
+#Aplicacion de la prueba de friedman
+p5_fri <- m5_largo %>%
+  rstatix::friedman_test(calidad ~ version | instancia)
+print(p5_fri)
+
+#tamaño del efecto
+p5_eff <- m5_largo %>%
+  rstatix::friedman_effsize(calidad ~ version | instancia)
+print(p5_eff)
+```
+Con una nivel de significancia del $0.05$, y con un p-value $0.348$, la prueba de Friedman, indica que no hay evidencia suficiente para descartar la hipotesis nula, concluyendo que la versiones A,B y C, podrian ser equivalentes en cuanto a la calidad de sus soluciones
+
+```{r}
+# Análisis post-hoc apareado con ajuste de Holm y BH
+p5_post <- m5_largo %>%
+  rstatix::pairwise_wilcox_test(calidad ~ version, paired = TRUE, p.adjust.method = "holm") %>%
+  mutate(p.BH = p.adjust(p, method = "BH")) %>%
+  select(group1, group2, n1, statistic, p, p.adj, p.BH)
+print(p5_post)
+```
+Mediante la prueba post-hoc, se confirma que no hay diferencias significativas entre ningun par de versiones (A vs B, p.adj = 0.370. A vs C, p.adj = 0.244. B vs C, p.adj = 0.370). Por lo tanto, no hay evidencia suficiente para decir que alguna version del algoritmo sea mejor o peor que las demas instancias 
+
+## Pregunta 6
+
+Considerando las instancias con 70 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A y B del algoritmo? Con la semilla 837, saquen 22 instancias para la versión A y 19 instancias para la versión B, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 22 y media 1.307.386; B, n = 19 y media 2.464.618 [ms].
+
+#### Respuesta:
+
+Se seleccionan 41 instancias distintas: 22 para A y 19 para B. Cada instancia se usa en una sola versión, por lo que las muestras son independientes.
+
+```{r}
+set.seed(837)
+i6 <- sample.int(nrow(d70), 41)
+
+m6 <- data.frame(
+  instancia = d70$instancia[i6],
+  version = factor(rep(c("A", "B"), c(22, 19)), levels = c("A", "B")),
+  tiempo = c(d70$tiempo.A[i6[1:22]], d70$tiempo.B[i6[23:41]])
+)
+
+print(m6, row.names = FALSE)
+tapply(m6$tiempo, m6$version, mean)
+```
+
+Se obtiene A, $n = 22$ y media $1.307.386$; B, $n = 19$ y media $2.464.618$ ms.
+
+#### Prueba paramétrica
+
+Correspondería la prueba $t$ de Student para muestras independientes. Sus condiciones son independencia, normalidad en cada grupo y homocedasticidad.
+
+$H_0$: El tiempo medio de ejecución es igual en A y B.
+
+$H_a$: El tiempo medio de ejecución difiere entre A y B.
+
+#### Exploración gráfica y revisión de condiciones
+
+La independencia se cumple porque cada instancia se usa en una sola versión. El boxplot permite comparar la dispersión entre grupos y detectar valores atípicos; los Q-Q permiten revisar la normalidad de cada grupo.
+
+```{r}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+
+boxplot(tiempo ~ version, data = m6,
+        col = c("lightblue", "moccasin"),
+        xlab = "Versión", ylab = "Tiempo (ms)",
+        main = "Tiempos por versión")
+stripchart(tiempo ~ version, data = m6, method = "jitter", vertical = TRUE,
+           add = TRUE, pch = 16, col = rgb(0, 0, 0, 0.4))
+
+qqnorm(m6$tiempo[m6$version == "A"], pch = 16, main = "Q-Q versión A")
+qqline(m6$tiempo[m6$version == "A"], col = "red")
+
+qqnorm(m6$tiempo[m6$version == "B"], pch = 16, main = "Q-Q versión B")
+qqline(m6$tiempo[m6$version == "B"], col = "red")
+
+par(op)
+```
+
+B tiene una mediana mucho mayor que A. Ambas distribuciones son asimétricas hacia la derecha y A presenta una observación extrema. El Q-Q de A se aparta de la línea, mientras que el boxplot no muestra una diferencia marcada de dispersión. Para contrastar formalmente:
+
+```{r}
+shapiro.test(m6$tiempo[m6$version == "A"])
+shapiro.test(m6$tiempo[m6$version == "B"])
+leveneTest(tiempo ~ version, data = m6)
+```
+
+La normalidad se rechaza en A ($p = 0,0016 < 0,05$); en B no se rechaza ($p = 0,610$). Levene no rechaza la igualdad de varianzas ($p = 0,810$). Como falla la normalidad en A, no se cumplen las condiciones y no se aplica la prueba $t$.
+
+#### Prueba basada en rangos e hipótesis
+
+Se usaría la prueba U de Mann-Whitney.
+
+$H_0$: las distribuciones (medianas) del tiempo de ejecución son iguales para A y B.
+
+$H_a$: las distribuciones (medianas) del tiempo de ejecución difieren entre A y B.
+
+```{r}
+
+# Prueba
+p6_wilcox <- m6 %>%
+  rstatix::wilcox_test(tiempo ~ version, detailed = TRUE)
+print(p6_wilcox)
+
+
+
+
+# Tamaño del efecto
+p6_effsize <- m6 %>%
+  rstatix::wilcox_effsize(tiempo ~ version)
+print(p6_effsize)
+```
+
+
+Con un nivel de significancia $0.05$ y un p-value es $0.000553$, se rechaza la hipotesis nula en favor de la alternativa. Tambien al tener un tamaño del efecto $0.523$, se indica que la diferencia es grande. Por lo tanto, existe evidencia suficiente para afirmar que la version B requiere tiempos de ejecución mayores que la versión A en instancias de 70 o más nodos
+
+
+
+
+
+
+El análisis fue hecho en la versión de R
+
+
+R version 4.6.1 (2026-06-24 ucrt)
+

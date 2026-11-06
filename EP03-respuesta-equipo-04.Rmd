@@ -1,0 +1,187 @@
+---
+title: "EP03-avance-equipo-4"
+date: "2026-10-08"
+output:
+  html_document:
+    toc: false
+    toc_float: false
+    toc_depth: 3
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggpubr)
+library(pwr)
+library(ggplot2)
+library(tidyr)
+```
+## La situación
+
+Una exportadora compra cerezas a dos huertos, uno con riego tradicional y otro con riego tecnificado. Por los registros de temporadas anteriores, se sabe que el calibre (el diámetro) de las cerezas sigue una distribución normal con una desviación estándar de 2 mm. El jefe de calidad quiere comprobar que el calibre medio es de 28 mm, y para eso va a medir 100 cerezas, 50 de cada huerto. Además, cree que el huerto tecnificado tiene más cerezas de calibre exportable que el tradicional.
+
+### 1. El jefe de calidad rechazará que el calibre medio es 28 mm si la media de la muestra es menor que 27,58 mm o mayor que 28,42 mm. Supongan que el verdadero calibre medio es 27,45 mm. Hagan un gráfico con las dos distribuciones muestrales, la hipotética y la verdadera, y marquen y calculen α y β. ¿Qué significa, para la exportadora, cometer un error de tipo II en este caso?
+
+Para completar con las exigencias de la pregunta, se calcula el valor de alpha y beta a partir de la desviación estándar que da el contexto y la cantidad de observaciones de la muestra, considerando que la distribución es normal y se busca inferir acerca de la media poblacional, teniendo en cuenta que se tiene la varianza poblacional mencionada en el contexto (2 [mm] históricamente), además de que hay varias muestras, concluimos que usaremos la prueba z (ya que t de Student es para muestras pequeñas).
+```{r pregunta-1, message=FALSE, warning=FALSE}
+n <- 100 # Cantidad de cerezas (se considera una muestra única, sin diferenciar por huerto)
+desv_estandar <- 2 # Desviación estandar del contexto
+SE <- desv_estandar / sqrt(n) # Error estandar
+media_verdadera <- 27.45
+media_nula <-  28
+alfa <- pnorm(27.58, mean=media_nula, sd=SE)+(1-pnorm(28.42, mean=media_nula, sd=SE))
+
+delta <- media_verdadera - media_nula # Diferencia de las medias
+d<- delta/desv_estandar # D de cohen
+# Se deja power = NULL para que la función lo estime y lo extraemos de los datos resultantes
+poder = pwr.norm.test(d=d,n=n, sig.level = alfa,power=NULL,alternative = "two.sided")
+valor_pwr <- poder$power # Se cambió la forma de calcular beta ya que la del avance 1 estaba incorrecta, no son directamente proporcional
+beta = 1-valor_pwr
+
+##==== GRAFICO CONSTRUIDO CON LOS CÓDIGOS DEL TEXTO PERUSALL ====
+
+# Primero, el gráfico base
+g_x_limites <- media_nula + c(-6, 6) * SE
+g <- ggplot() + xlim(g_x_limites) + ylim(c(0 , 2.2))
+g <- g + labs(title = "Distribución muestral de las medias")
+g <- g + labs(x = "Calibre medio [mm]", y = "Densidad")
+g <- g + theme_pubr()
+
+# Agregamos la hipótesis nula
+dist_0 <- stat_function(fun = dnorm, geom = "area",
+                        args = list(mean = media_nula, sd = SE),
+                        colour = "steelblue4", fill = "steelblue4", alpha = 0.2)
+g1 <- g + dist_0
+g1 <- g1 + geom_vline(xintercept = media_nula, colour = "steelblue4")
+
+# Calcular y colorear las regiones críticas de la hipótesis nula
+z_critico_inferior <- qnorm(alfa/2, mean = media_nula, sd = SE, lower.tail = TRUE)
+z_critico_superior <- qnorm(alfa/2, mean = media_nula, sd = SE, lower.tail = FALSE)
+
+g2 <- g1 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue4", alpha = 0.4)
+g2 <- g2 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue4", alpha = 0.4)
+
+# Definir los valores verdaderos, usualmente desconocidos
+delta <- media_nula - media_verdadera
+
+# Agregar la verdadera distribución muestral de las medias
+g3 <- g2 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         colour = "steelblue1", fill = "steelblue1", alpha = 0.2)
+g3 <- g3 + geom_vline(xintercept = media_verdadera, colour = "steelblue1")
+
+# Agregar anotación del tamaño del efecto y mostrar el gráfico que resulta
+x_ann <- c(media_verdadera, media_nula)
+y_ann <- c(dnorm(media_verdadera, mean = media_verdadera, sd = SE),
+           dnorm(media_nula, mean = media_nula, sd = SE))
+y_ann <- y_ann + 0.005
+g4 <- g3 + annotate("segment", x = x_ann[1], y = y_ann[1],
+                    xend = x_ann[2], yend = y_ann[2],
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "both", type = "open"))
+g4 <- g4 + annotate("text", x = sum(x_ann) / 2, y = y_ann[1] + 0.015,
+                    label = "delta", vjust = "top", parse = TRUE)
+
+print(g4)
+```
+
+Resultados: En el gráfico se puede observar cómo los extremos de la distribución normal de la derecha resaltan de otro color, ya que estás areás son las que marcan alpha (`r alfa`) y la intersección de las distribuciones indica beta (`r beta`).
+
+¿Qué significa cometer un error de tipo II bajo el contexto presentado? Aceptar la media real de 27.54 [mm] la cual está fuera de su rango (ya que espera una media de 28 [mm]). Así exportando fruta más pequeña de la esperada.
+
+### 2. Hagan el gráfico del poder de esta prueba suponiendo que el verdadero calibre medio puede ir de 27 a 29 mm. ¿Cuánto vale el poder cuando el calibre medio es exactamente 28 mm? ¿Por qué?
+
+```{r pregunta-2, message=FALSE, warning=FALSE}
+n <- 100
+desv_estandar <- 2
+SE <- desv_estandar / sqrt(n)
+
+# Calculamos alfa usando las zonas de rechazo definidas (27.58 y 28.42)
+alfa <- pnorm(27.58, mean=28, sd=SE) + (1 - pnorm(28.42, mean=28, sd=SE))
+
+# Poder cuando el calibre medio es exactamente 28
+d <- 0 # Esto basado en que la nula y la real son iguales es decir 28
+poder <- pwr.norm.test(d = d, n = n, sig.level = alfa, alternative = "two.sided")
+
+cat("El poder cuando el calibre medio es exactamente 28 mm es:", poder$power, "\n")
+
+# Preparar los datos para el gráfico de 27 a 29 mm
+medias_reales <- seq(27, 29, by = 0.01)
+
+# Creamos una función que calcule el poder para cada media usando pwr.norm.test
+calcular_poder_pwr <- function(media) {
+  # Tamaño del efecto (d de Cohen) = (Media Real - Media Nula) / Desviación Estándar
+  d_val <- (media - 28) / desv_estandar 
+  
+  # Calculamos el poder usando pwr.norm.test
+  res <- pwr.norm.test(d = d_val, n = n, sig.level = alfa, alternative = "two.sided")
+  return(res$power)
+}
+
+##==== GRAFICO CONSTRUIDO CON LOS CÓDIGOS DEL TEXTO PERUSALL ====
+
+# Armamos el gráfico del poder manteniendo la lógica de capas
+g_poder <- ggplot(data.frame(x = c(27, 29)), aes(x = x)) + 
+  theme_minimal() +
+  labs(title = "Curva de Poder (Pregunta 2)", x = "Verdadero Calibre Medio (mm)", y = "Poder")
+
+# Agregamos la curva de poder usando stat_function
+g_poder1 <- g_poder + stat_function(fun = calcular_poder_pwr, 
+                                         colour = "darkgreen", linewidth = 1.2)
+
+# Marcamos el punto donde media = 28 (el poder es igual a alfa)
+g_poder2 <- g_poder1 + 
+  geom_vline(xintercept = media_nula, colour = "steelblue4", linetype = "dashed") +
+  geom_hline(yintercept = alfa, colour = "red", linetype = "dotted") +
+  annotate("text", x = 27.2, y = alfa + 0.05, 
+           label = paste("Poder mínimo =", round(alfa, 4)), color = "red")
+
+print(g_poder2)
+```
+El poder estadístico en este caso es igual a la probabilidad de cometer un error de tipo I, ya que están solapados, por lo tanto, la probabilidad de cometer cualquier tipo de error (I o II) es muy baja.
+
+### 3. Si el verdadero calibre medio fuera 27,45 mm, ¿cuántas cerezas habría que medir para tener un poder de 0,85 con α = 0,05?
+
+```{r pregunta-3, message=FALSE, warning=FALSE}
+varianzap3 <- 2 # Sacado del contexto inicial
+deltap3 <- media_verdadera - media_nula
+df <- deltap3 / varianzap3
+alfap3 <- 0.05 # Sacado de la pregunta
+poderp3 <- 0.85 # Sacado de la pregunta
+# Se hace la prueba de poder
+prueba <-pwr.norm.test(d=df,n=NULL, sig.level = alfap3, power = poderp3, alternative = "two.sided")
+# Se saca el n que estima la prueba
+cantidad <- prueba$n
+```
+
+La cantidad de cerezas que habría que medir para tener un poder de 0,85 con alpha = 0,05 es de `r round(cantidad,0)`
+
+### 4. El jefe de calidad cree que alrededor del 90 % de las cerezas del huerto tecnificado son de calibre exportable, contra el 80 % del tradicional. Supongan que las cerezas de la pregunta 3 se reparten en partes iguales entre los dos huertos. ¿Alcanza esa muestra para detectar la diferencia que el jefe de calidad cree que hay entre los huertos, con el mismo nivel de significación (0,05) y un poder de al menos 0,8? Si no alcanza, ¿cuántas cerezas de cada huerto harían falta?
+
+Ya que la cantidad de cerezas calculadas en la pregunta anterior es de 119 y no se puede repartir en dos cantidades iguales, se decide utilizar 120 cerezas para poderlas repartir en dos partes iguales de 60 para cada huerto.
+```{r pregunta-4, message=FALSE, warning=FALSE}
+
+p1 <- 0.9 # Proporción del huerto tecnificado
+p2 <- 0.8 # Proporción del huerto tradicional
+significancia <- 0.05
+poder_deseado <- 0.8
+n_por_grupo <- 60 # Cantidad de cerezas para cada huerto
+
+# Tamaño del efecto para la diferencia de proporciones (h de Cohen ya que d de Cohen es para comparar medias)
+h_efecto <- ES.h(p1, p2)
+
+# Evaluar el poder con 60 cerezas por huerto
+prueba_actual <- pwr.2p.test(h = h_efecto, n = n_por_grupo, power = NULL, sig.level = significancia)
+poder_obtenido <- round(prueba_actual$power, 3)
+
+# Calcular el tamaño de muestra necesario si no se alcanza el poder
+prueba_necesaria <- pwr.2p.test(h = h_efecto, n = NULL, power = poder_deseado, sig.level = significancia)
+muestra_necesaria <- round(prueba_necesaria$n,0)
+
+```
+El poder obtenido en cada huerto con 60 cerezas de muestra en cada uno es de `r poder_obtenido` el cual es mucho menor al poder deseado, por lo tanto, tenemos que calcular la muestra necesaria para tener el poder deseado. En este cálculo, la muestra necesaria en cada huerto es de `r muestra_necesaria` cerezas
+
