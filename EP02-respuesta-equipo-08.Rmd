@@ -1,0 +1,270 @@
+---
+title: "Ejercicio Práctico 2"
+author: "Diego Lefiman | Michel Vargas | Gustavo Vásquez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Preguntas a resolver
+
+1. ¿Es distinta la proporción de atletas que mejoraron su marca en al menos 0,29 segundos entre las zonas Centro-Norte y Sur?
+2. ¿Es posible afirmar que, tras los seis meses de entrenamiento, el tiempo medio de los atletas de la zona Centro-Sur es mayor que el de los de la zona Centro-Norte en menos de 0,55 segundos?
+3. ¿Es el tiempo medio de los atletas de la zona Centro-Norte antes del entrenamiento distinto de 12,15 segundos?
+4. ¿Sugieren los datos que la mejora media de los atletas de la zona Centro-Norte tras el entrenamiento es distinta de 0,29 segundos?
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggpubr)
+# Cargar datos
+datos <- read.csv("EP02-Datos.csv", sep = ";")
+datos$Previo <- as.numeric(gsub(",", ".", datos$Previo))
+datos$Posterior <- as.numeric(gsub(",", ".", datos$Posterior))
+
+```
+
+## Pregunta 1
+
+**¿Es distinta la proporción de atletas que mejoraron su marca en al menos 0,29 segundos entre las zonas Centro-Norte y Sur?**
+
+La variable a considerar es una de tipo dicotómica, considerando éxito como superar la marca de 0.29. Esta variable se obtiene de la diferencia entre Posterior y Previo, si la diferencia es mayor o igual a 0.29 segundos, es un éxito (1) y si es menor se considera un fracaso (0). Los grupos que intervienen son los atletas de la zona Centro-Norte y Sur. Las hipótesis a contrastar son:
+
+$H_0:$ Las proporciones poblacionales son iguales. Matématicamente: $p_{CN} - p_{CS} = 0$.
+
+$H_1:$ Las proporciones poblacionales son distintas. $p_{CN} - p_{CS} \neq 0$.
+
+Donde $p_{CN}$ es la proporción poblacional de atletas que mejoraron su marca en al menos 0.29 segundos de la zona Centro-Norte, $p_{CS}$ es el análogo para la zona Centro-Sur. Se usa la prueba de Wald para dos proporciones. Usamos esta prueba porque las muestras son independientes. Además se cumplen las condiciones de éxito-fracaso para ambas muestras como muestra el siguiente script. La significación se fija como $\alpha = 0.05$.
+
+```{r}
+# Filtrar datos
+datos_cn <- datos |> filter(Zona == "Centro-Norte")
+datos_sur <- datos |> filter(Zona == "Sur")
+
+# Éxitos de cada zona
+exitos_cn_vec <- (datos_cn$Previo - datos_cn$Posterior) >= 0.29
+exitos_sur_vec <- (datos_sur$Previo - datos_sur$Posterior) >= 0.29
+
+n_cn <- nrow(datos_cn)
+n_sur <- nrow(datos_sur)
+
+exitos_cn <- sum(exitos_cn_vec)
+exitos_sur <- sum(exitos_sur_vec)
+
+valor_nulo <- 0
+
+fracasos_cn <- n_cn - exitos_cn
+fracasos_sur <- n_sur - exitos_sur
+
+cat("Verificacion de exitos y fracasos para Metodo Wald: \n")
+cat("Centro-Norte \n          Éxitos:", exitos_cn, "; Fracasos:", fracasos_cn, "\n")
+cat("Sur          \n          Éxitos:", exitos_sur, "; Fracasos:", fracasos_sur, "\n\n")
+
+n_sig <- 0.05
+
+# Probabilidad de éxito
+p_cn <- exitos_cn / n_cn
+
+p_sur <- exitos_sur / n_sur
+
+# Difencia de las proporciones
+diferencia <- p_cn  - p_sur
+
+# Error 
+error_cn <- (p_cn * (1-p_cn))/n_cn
+error_sur <- (p_sur*(1-p_sur))/n_sur
+error_std <- sqrt(error_cn + error_sur)
+
+Z_critico <- qnorm(n_sig/2,lower.tail = FALSE)
+inferior <- diferencia - Z_critico * error_std
+superior <- diferencia + Z_critico * error_std
+
+cat("Intervalo de confianza : [ " , inferior , "," , superior , "]")
+
+p_agrupada <- (exitos_cn + exitos_sur)/(n_cn + n_sur)
+error_cn_nula <- (p_agrupada * (1-p_agrupada)) / n_cn
+error_sur_nula <- (p_agrupada * (1-p_agrupada)) /n_sur
+error_std_h_nula <- sqrt(error_cn_nula + error_sur_nula)
+
+Z <- (diferencia - valor_nulo) / error_std_h_nula
+
+p <- 2 * pnorm(abs(Z), lower.tail = FALSE)
+cat("\n\nHipotesis alternativa bilateral \n")
+cat("Z = ", Z, "\n")
+cat("p = ", p, "\n\n")
+
+```
+
+Como el p-value (0.7216176) es mayor que el nivel de significancia (0.05), se falla en rechazar la hipótesis nula. Con un 95% de confianza, no existe evidencia estadística suficiente para afirmar que la proporción de atletas que mejoraron su marca en al menos 0.29 segundos sea distinta entre las zonas Centro-Norte y Sur.
+
+## Pregunta 2
+
+**¿Es posible afirmar que, tras los seis meses de entrenamiento, el tiempo medio de los atletas de la zona Centro-Sur es mayor que el de los de la zona Centro-Norte en menos de 0,55 segundos?**
+
+La variable a evaluar es Posterior, considerando dos muestras, una con atletas de la zona Centro-Sur y la otra con atletas de la zona Centro-Norte. Utilizaremos una prueba t de student para dos muestras independientes, aplicando la correción de Welch. El parámetro a inferir es la diferencia entre las medias poblacionales del tiempo posterior al entrenamiento de ambas zonas. No se tiene información suficiente para suponer que las muestras no son independientes entre sí. Las hipótesis a considerar son:
+
+$H_0:$ La diferencia entre las medias poblacionales es mayor o igual a 0.55 segundos. Matemáticamente: $\mu_{CS} - \mu_{CN} \geq 0.55$.
+
+$H_1:$ La diferencia entre las medias poblacionales es menor a 0.55 segundos. Matemáticamente: $\mu_{CS} < \mu_{CN} = 0.55$.
+
+Donde $\mu_{CS}$ es el tiempo medio poblacional posterior al entrenamiento de los atletas de la zona Centro-Sur y $\mu_{CN}$ es el análogo para para la zona Centro-Norte. La prueba se realizará con un nivel de significación $\alpha = 0.05$.
+
+```{r}
+
+# Filtrar datos de la zona
+datos_cs <- datos |> filter(Zona == "Centro-Sur")
+
+# Fijar nivel de significación
+alfa <- 0.05
+
+# Verificar normalidad de las muestras
+normalidad_cs_posterior <- shapiro.test(datos_cs$Posterior)
+g_cs_posterior <- ggqqplot(data = data.frame(datos_cs$Posterior), x = "datos_cs$Posterior",
+                title = "Grafico Q-Q v/s distribución normal para la zona Centro-Sur",
+                xlab = "Teórico", ylab = "Muestra",
+                color = "steelblue", alpha = 0.7)
+
+
+normalidad_cn_posterior <- shapiro.test(datos_cn$Posterior)
+g_cn_posterior <- ggqqplot(data = data.frame(datos_cn$Posterior), x = "datos_cn$Posterior",
+                title = "Grafico Q-Q v/s distribución normal para la zona Centro-Norte",
+                xlab = "Teórico", ylab = "Muestra",
+                color = "red", alpha = 0.7)
+
+cat("Pruebas de normalidad:\n")
+cat("----------------------\n")
+print(normalidad_cs_posterior)
+print(normalidad_cn_posterior)
+
+print(g_cs_posterior)
+print(g_cn_posterior)
+
+# Aplicar prueba t de Student para dos muestras independientes, con corrección de Welch
+prueba_p2 <- t.test(x = datos_cs$Posterior, y = datos_cn$Posterior, paired = FALSE, alternative = "less", mu = 0.55, conf.level = 1 - alfa)
+
+diferencia <- prueba_p2[["estimate"]][1] - prueba_p2[["estimate"]][2]
+
+# Mostrar resultado
+cat("\nPrueba t para dos muestras independientes:\n")
+cat("------------------------------------------\n")
+print(prueba_p2)
+cat("Diferencia de las medias =", diferencia, "[s]")
+
+```
+
+Las dos pruebas de normalidad dan un valor $p$ mayor a 0.05, con un estadístico $W$ cercano a 1, lo que indica que no hay evidencia suficiente para descartar que las muestras siguen una distribución normal. Esto se reafirma al observar los gráficos Q-Q, que como podemos observar, alinean los datos a lo largo de la recta de referencia, manteniendose dentro de las bandas de confianza denotadas por el área sombreada.
+
+Las medias muestrales arrojaron 12.17938 [s] para la zona Centro-Sur y 12.03941 [s] para la zona Centro-Norte, lo que da una diferencia de 0.1399632 [s]. El intervalo de confianza del 95%  es $[-\infty, 0.3702955]$
+
+El valor $p = 0.0022 < \alpha = 0.05$ por un gran margen, por tanto la evidencia sugiere que existe información suficiente para descartar la hipótesis nula en favor de la hipótesis alternativa. Por ende, existe evidencia para afirmar que tras los seis meses de entrenamiento, el tiempo medio de los atletas de la zona Centro-Sur es mayor que el de los de la zona Centro-Norte en menos de 0.55 [s].
+
+## Pregunta 3
+
+**¿Es el tiempo medio de los atletas de la zona Centro-Norte antes del entrenamiento distinto de 12,15 segundos?**
+
+La variable a analizar en este caso es Previo. Los grupos que intervienen son los atletas de la zona Centro-Norte y el parámetro a inferir es el tiempo medio poblacional de los atletas antes del entrenamieto. Se plantean las hipótesis:
+
+$H_0:$ La media poblacional del tiempo de los atletas de la zona Centro-Norte previo al entrenamiento es igual 12.15 segundos. Matématicamente: $\mu_{CN} = 12.15$.
+
+$H_1:$ La media poblacional del tiempo de los atletas de la zona Centro-Norte previo al entrenamiento es distinta de 12.15 segundos. Matématicamente: $\mu_{CN} \neq 12.15$.
+
+Donde $\mu_{CN}$ es la media poblacional de la zona Centro-Norte. Se realizará una prueba t de student para una muestra con tal de constrastar estas hipótesis. Se eligió esta prueba ya que el parámetro a inferir es la media y desconocemos la desviación estándar de la población $\sigma$, por lo cual no podemos aplicar la prueba Z. El nivel de significación es $\alpha = 0.05$.
+
+```{r, warning=FALSE, message=FALSE}
+
+# Verificación de condiciones (Normalidad) - Shapiro Wilk
+normalidad_cn_previo <- shapiro.test(datos_cn$Previo)
+
+cat("Prueba de normalidad:\n")
+cat("----------------------\n")
+print(normalidad_cn_previo)
+
+# Gráfico Q-Q
+g_cn_previo <- ggqqplot(data=data.frame(Tiempo = datos_cn$Previo), x = "Tiempo", title = "Q-Q Plot: Tiempo previo Zona Centro-Norte", color = "steelblue")
+print(g_cn_previo)
+```
+
+Al realizar la prueba de Shapiro-Wilk sobre los tiempos previos de los atletas de la zona Centro-Norte, se obtuvo un valor W = 0,9561 y un p-value = 0,1867. Como el valor de p-value es mayor al nivel de significación (0,05), se falla al rechazar la hipótesis nula. Por lo tanto, no hay evidencia estadística para descartar que la distribución de la muestra se asemeje a la normal, cumpliéndose la condición necesaria para aplicar la prueba t de Student. Como complemento, se elaboró un gráfico Q-Q donde se observa que los datos se ajustan a la línea diagonal teórica y se mantienen dentro del sector de confianza. Se confirma el resultado obtenido en la prueba de Shapiro-Wilk.
+
+```{r t-student, warning=FALSE}
+
+# Ejecución de la prueba de hipótesis
+alfa <- 0.05
+valor_nulo <- 12.15
+
+prueba_p3 <- t.test(x=datos_cn$Previo, alternative="two.sided", mu=valor_nulo, conf.level = 1 - alfa)
+
+print(prueba_p3)
+```
+
+Con un nivel de significación de 0,05, el p-value obtenido fue 0,006478. Al ser menor que alfa, se tiene que se rechaza la hipótesis nula en favor de la hipótesis alternativa. 
+Eso quiere decir, que el tiempo medio de los atletas de la zona Centro-Norte antes del entrenamiento es significativamente distinto de 12,15 segundos. Adicionalmente, el intervalo de confianza al 95% es de [12,21; 12,49] indica que el tiempo medio poblacional de este grupo es superior al valor de referencia.
+
+
+## Pregunta 4
+
+**¿Sugieren los datos que la mejora media de los atletas de la zona Centro-Norte tras el entrenamiento es distinta de 0,29 segundos?**
+
+Las variables a considerar son Previo y Posterior. Los grupos que intervienen son los atletas de la zona Centro-Norte. El parámetro a inferir es la media poblacional es la diferencia entre el tiempo previo y posterior. Las hipótesis son:
+
+$H_0:$ La media poblacional de la diferencia entre el tiempo previo y posterior es igual a 0.29 segundos. Matemáticamente: $\mu_{CN} = 0.29$.
+
+$H_1:$ La media poblacional de la diferencia entre el tiempo previo y posterior es distinta a 0.29. Matemáticamente: $\mu_{CN} = 0.29$.
+
+Donde $\mu_{CN}$ es la media poblacional de la diferencia entre el tiempo previo y posterior de la zona Centro-Norte. Se usa t de student para una muestra. No conocemos la desviación estándar de la población, por lo que no podemos usar la prueba Z. El nivel de significación que se usará es 0.05.
+
+```{r}
+
+#diferencia positiva indica que el atleta bajo su tiempo
+diferencias <- datos_cn$Previo - datos_cn$Posterior
+
+
+n <- length(diferencias)
+grados_libertad <- n - 1
+valor_nulo <- 0.29
+
+## Verificacion de condiciones.
+# 1-Independencia: Las diferencias
+
+shapiro <- shapiro.test(diferencias)
+print(shapiro)
+g <- ggqqplot(data = data.frame(diferencias), x = "diferencias",
+              title = "Gráfico Q-Q muestra v/s distribución normal",
+              xlab = "Teórico", ylab = "Muestra",
+              color = "steelblue", alpha = 0.7)
+print(g)
+```
+
+Al realizar el shapiro-wilk y tambien en realizar el grafico Q-Q, se puede observar lo siguiente:
+El shapiro-wilk, al hacer la comparativa entre el p-value (0.1165) y el nivel de significancia (0.05), como el valor de p es mayor al nivel de significancia, se falla en rechazar la hipotesis nula, que dice que la poblacion sigue una distribucion norma. No existe evidencia para descartar que las diferencias provengan de una distribucion normal. 
+Para confirmar usando el el grafico Q-Q, los puntos muestrales se alinean de manera consistente a lo largo de la linea de referencia. Satisfaciendo las condiciones requeridas para seguir con el t-student
+
+```{r}
+nvl_sig <- 0.05
+
+media <- mean(diferencias)
+desv_est <- sd(diferencias)
+error_est <- desv_est/sqrt(n)
+estadistico_t <- (media - valor_nulo) / error_est
+
+p <- 2 * pt(abs(estadistico_t), df = grados_libertad, lower.tail = FALSE)
+
+cat("Media muestral: ", media, "[s]\n")
+cat("Estadistico t: ", estadistico_t, "\n")
+cat("Valor p: ", p, "\n\n")
+
+
+
+t_critico <- qt(nvl_sig/2, df = grados_libertad, lower.tail = FALSE)
+inferior <- media -t_critico * error_est
+superiro <- media + t_critico * error_est
+
+cat("Intervalo de confianza (95%)")
+cat(" [", inferior, ", ", superior, "]\n", sep = "")
+
+
+prueba <- t.test(diferencias, mu = valor_nulo, alternative = "two.sided", conf.level = 1 - nvl_sig)
+cat("\n\nPrueba t unilateral para una muestra usando t.test\n")
+print(prueba)
+
+```
+
+Como el p-value es 0.3432, siendo mayor al nivel de significancia (0.05). Entonces falla en rechazar la hipotesis nula. Debido a que no hay evidencia suficiente para afirmar que la mejora media de los atletas de la zona Centro-Norte sea distinta de 0,29 segundos.
